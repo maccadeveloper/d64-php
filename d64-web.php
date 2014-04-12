@@ -1,6 +1,10 @@
 <?
 // d64-web 0.01a
-
+$show_bam = $_POST["show_bam"]||$_GET["show_bam"];
+$show_dir = $_POST["show_dir"]||$_GET["show_dir"];
+$Submit = $_POST["Submit"]||$_GET["Submit"];
+$followfile = "demo1.d64";
+//$file = $_POST["file"]||$_GET["file"];
 if ( $show_bam == '1' ) {
 	$checked_bam = "checked";
 } else {
@@ -17,7 +21,7 @@ if ( $show_dir == '1' ) {
 <html>
 <body>
 <font face="Arial, Helvetica, sans-serif">
-<form name=file action=<?=$PHP_SELF?> method=post>
+<form name=file action=<?=$_SERVER['PHP_SELF']?> method=post>
 Show BAM <input type=checkbox name=show_bam value=1 <?=$checked_bam?>>
  - Show Directory <input type=checkbox name=show_dir value=1 <?=$checked_dir?>>
  - Disk Image File <input type=text name=file value=<?=$file?>>
@@ -28,6 +32,8 @@ Show BAM <input type=checkbox name=show_bam value=1 <?=$checked_bam?>>
 if ( $followfile ) {
 	$followfile = base64_decode($followfile);
 	echo "Followfile: $followfile";
+}else{
+	$followfile = $file;
 }
 
 if ( $Submit ) {
@@ -39,8 +45,19 @@ if ( substr($file, -2) == 'gz' ) {
 }
 
 //$d64 = gzopen( $file, "r" );
-$d64 = fopen( $file, "r" );
-
+$d64 = fopen( "demo1.d64", "r" );
+echo("<pre>");
+for($x=0;$x<664;$x++)
+{
+	fseek($d64, ($x * 256));
+	$out = fread($d64, 2);
+	echo(dechex($x).":".bin2hex($out).":");
+	fseek($d64, ($x * 256)+2);
+	$out = fread($d64, 254);
+	echo(bin2hex($out)."<br />");
+}
+echo("</pre>");
+			
 //  Track #Sect #Blocks in D64 Offset   Track #Sect #Blocks in D64 Offset
 //  ----- ----- ---------- ----------   ----- ----- ---------- ----------
 //    1     21       0       $00000      21     19     414       $19E00
@@ -147,10 +164,10 @@ $d64 = fopen( $file, "r" );
 
 
 if ( $format == '' ) {
-	echo "Formato desconocido, se intentara con D64<hr>";
-	$format = "64";
+	echo "Unknown format, will attempt D64<hr>";
+	
 }
-
+$format = 64;
 // Veo que formato de disco es
 switch ( $format ) {
 	case 64:
@@ -175,38 +192,38 @@ switch ( $format ) {
 		die("No puedo procesar el formato $formato.");
 }
 
-// Avanzo 256 bytes por los sectores por pista de cada formato de disco
-// y hasta la pista del directorio y a eso le sumo 141 para avanzar el BAM
-// si es d64 o d71
+// Moved 256-byte sectors per track of each disc format
+// and up to the track directory and that 141 added to advance the BAM
+// If it is d64, d71
 $offset 	= ( (256 * $sectors) * ($dir-1) );
 
 if ( $format == '64' or $format == '71' ) {
-	// Offsets Varios para el header
+	// Different Offsets for the header
 	$offset_bam 	= $offset + 0;
 	$offset_name 	= $offset + 144;
 	$offset_id 	= $offset + 162;
 	$offset_2a 	= $offset + 165;
 	$offset_xtra 	= $offset + 180;
 
-	// Leo el nombre del disco
+	// read the name of the disc
 	fseek($d64, $offset_name);
 	$nombre = fread($d64, 17);
 
-	// Leo el ID del disco
+	// read the ID of the disc
 	fseek($d64, $offset_id);
 	$id = fread($d64, 2);
 
-	// Leo el 2A del disco
+	// read the 2A of the disc
 	fseek($d64, $offset_2a);
 	$dosa = fread($d64, 2);
 
-	// Leo los caracteres extra si es que los hay
+	// read the extra characters if any
 	fseek($d64, $offset_xtra);
 	$extra = fread($d64, 11);
 }
 
 if ( $format == '81' ) {
-	// Offsets Varios para el header
+	// Different Offsets for the header
 	$offset_name 	= $offset + 4;
 	$offset_id 	= $offset + 22;
 	$offset_2a 	= $offset + 25;
@@ -251,6 +268,10 @@ if ( $show_dir == 1 ) {
 // Muestro la BAM si corresponde
 if ( $show_bam == 1 ) {
 	echo "<br><center><font size=+3>BAM (Block Availability Map)</font>";
+
+	$td=$_GET["td"];
+	$sd=$_GET["sd"];
+
 	ShowBam($d64, $offset_bam, $format, $followfile, $td, $sd);
 	echo "</center>";
 }
@@ -295,8 +316,7 @@ function LeerDir($d64, $tr, $format, $parms) {
 
 		for ( $cant=0; $cant < 8; $cant++ ) {
 
-			// Avanzo hasta el track del directorio y le sumo 32 
-			// para la proxima entrada.
+			// Advance to the track directory and add 32 for the next input
 			fseek($d64, ( $track[$tr] + (256*$s) + 2 ) + ( $cant * 32 ) );
 			$type = ord(fread($d64, 1));
 			//echo ">>>>>>> $type <<<<<<<<\n";
@@ -415,12 +435,12 @@ function ShowBam($d64, $offset_bam, $format, $followfile, $td, $sd) {
 	}
 
 	if ( $format == '71' ) {
-		// Leo la 2 parte de la BAM del disco
-		// En la pista 53 (la 18 del lado 2) esta la BAM del 2do. lado
-		// Para seguir agragando al array de la BAM
-		// sigo en el 144 y le sumo 104 (porque la estructura de la BAM
-		// del 2do. lado es diferente, como improvisaron!!!!!!
-		// o sea voy hasta 248
+		// Read the second part of the disk BAM
+		// In track 53 (18 on the 2 side) this 2nd BAM. side
+		// To follow agragando to the array of the BAM
+		// I'm still in the 144 and endorse him 104 (because the structure of the BAM)
+		// 2nd. side is different, as they improvised!
+		// or go to 248
 		$offset_bam2 = ( (256 * 21) * (53-1) );
 		for ( $a=144; $a < 248; $a++ ) {
 			fseek($d64, $offset_bam2 + $a);
@@ -454,19 +474,19 @@ function ShowBam($d64, $offset_bam, $format, $followfile, $td, $sd) {
 
 
 	for ( $a=5; $a <= 141; $a++) {
-		// Traigo los 3 bytes que tienen datos por cada sector
+		// take 3 bytes for each sector
 		$byte[1] = decbin(ord($bam[$a++]));
 		$byte[2] = decbin(ord($bam[$a++]));
 		$byte[3] = decbin(ord($bam[$a++]));
 
 		for ( $x=1; $x <= 3; $x++ ) {
-			// Completo los bytes con el formato a 8 bits
+			// fill to 8 bits
 			$byte[$x] = sprintf("%08d",$byte[$x]);
 
-			// Invierto cada byte  porque la BAM los usa asi
+			// invert every byte because the BAM uses asii
 			for ( $z=7; $z>=0; $z-- ) {
 				if ( $byte[$x][$z] != '' ) {
-					// Armo la BAM track por track
+					// store the BAM track by track
 					$bam_disk[$trac] = $bam_disk[$trac] . $byte[$x][$z];
 				}
 			}
@@ -478,19 +498,28 @@ function ShowBam($d64, $offset_bam, $format, $followfile, $td, $sd) {
 
 
 	if ( $format == '64' ) {
-		// Sigo el archivo para ver que sectores ocupa
+		// Continue to see that the file occupies sectors
 		if ( $followfile ) {
-			$arr_ts[1] = $td.":".$sd;   
+			$arr_ts[1] = $td.":".$sd;
+			echo("<h3>Block used in this file</h3>");
+			echo("<br />".str_pad(dechex($td),2,"0",STR_PAD_LEFT).":".str_pad(dechex($sd),2,"0",STR_PAD_LEFT));   
+					 
 			$arr_orden[$arr_ts[1]] = 1;
-
+			// try to extract actual data
+			$off = $track[$td] + ($sd*256);
+			fseek($d64, $off+2);
+			$out = fread($d64, 254);
+			echo("<br />".bin2hex($out));
+			//echo(bin2hex($out));
 			$i=2;
 			while ( $td != 0 ) {
-				// Calculo el offset para leer del disco
+				// Calculate the offset to read from disk
 				if ( $td < 10 ) {
 					$td = "0".$td;
 				}
 				//echo ">>(".$track[$td].")(".$td.")(".$sd.")<<";
-
+				$finaltd=$td;
+				$finalsd=$sd;
 				$off = $track[$td] + ($sd*256);
 				fseek($d64, $off);
 				$td = ord(fread($d64, 1));
@@ -498,13 +527,40 @@ function ShowBam($d64, $offset_bam, $format, $followfile, $td, $sd) {
 				fseek($d64, ($off+1) );
 				$sd = ord(fread($d64, 1));
 
-				if ( $td != 0 ) {
-					$arr_ts[$i] = $td.":".$sd;   
+				// for the last block use track = $00 then next bytes to $00xx where xx is the last byte of the file
+
+				//if ( $td != 0 ) {
+					
+					if ($td !=0){
+						$off = $track[$td] + ($sd*256);
+						fseek($d64, $off+2);
+						echo(" -> ".str_pad(dechex($td),2,"0",STR_PAD_LEFT).":".str_pad(dechex($sd),2,"0",STR_PAD_LEFT));
+						$buffer = fread($d64, 254);
+					}else{
+						//$off = $track[$finaltd] + ($finalsd*256);
+						fseek($d64, $off+2);
+						echo(" -> ".str_pad(dechex($td),2,"0",STR_PAD_LEFT).":".str_pad(dechex($sd),2,"0",STR_PAD_LEFT));
+
+						$buffer = fread($d64, $sd-1);
+					}
+
+					echo("<br />".bin2hex($buffer));
+					$out .= $buffer;
+					$arr_ts[$i] = $td.":".$sd;
+					//echo("<br />".str_pad(dechex($td),2,"0",STR_PAD_LEFT).":".str_pad(dechex($sd),2,"0",STR_PAD_LEFT));
 					$arr_orden[$arr_ts[$i]] = $i;
 					$i++;
-				}
-
+					
+				//}
 			}
+			
+			//$off = $track[$finaltd] + ($finalsd*256);
+			//fseek($d64, $off+2);
+			//$buffer = fread($d64, $sd);
+			//echo("<br />".bin2hex($buffer));
+			//$out .= $buffer;
+			
+			echo("<br />".bin2hex($out)."<br />");
 		}
 /*
 		echo "<hr>";
@@ -519,9 +575,9 @@ function ShowBam($d64, $offset_bam, $format, $followfile, $td, $sd) {
 */
 
 		echo "<table border=1>";
-		echo "<tr><td>Track</td><td>Free</td><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td><td>11</td><td>12</td><td>13</td><td>14</td><td>15</td><td>16</td><td>17</td><td>18</td><td>19</td><td>20</td></tr>";
+		echo "<tr><td>Track</td><td>Free</td><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>a</td><td>b</td><td>c</td><td>d</td><td>e</td><td>f</td><td>10</td><td>11</td><td>12</td><td>13</td><td>14</td></tr>";
 		for( $tr=1; $tr<$trac; $tr++ ) {
-			echo "<tr><td><b>$tr</b></td><td>$free[$tr]</td>";
+			echo "<tr><td><b>".dechex($tr)."($tr)</b></td><td>($free[$tr])</td>";
 			for( $sec=0; $sec<=20; $sec++ ) {
 				switch( $tr ) {
 					case 1:
